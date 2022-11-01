@@ -502,9 +502,18 @@ function getCustomConfig(
 async function compile(opts: any) {
   const { code, config, path, isV7, loaderContextId } = opts;
 
+  const shouldLog = path === '/index.js';
+
   try {
     let result;
     try {
+      if (shouldLog)
+        console.log(
+          `%c🟧 babel-worker: CALLING BABEL.TRANSFORM ${String(
+            Date.now()
+          ).slice(7)}`,
+          'font-weight: bold; color: orange;'
+        );
       result = Babel.transform(code, config);
     } catch (err) {
       err.message = err.message.replace('unknown', path);
@@ -530,6 +539,13 @@ async function compile(opts: any) {
       throw err;
     }
 
+    if (shouldLog)
+      console.log(
+        `%c🟧 babel-worker: CALLING GET DEPENDENCIES: ${String(
+          Date.now()
+        ).slice(7)}`,
+        'font-weight: bold; color: orange;'
+      );
     const dependencies = getDependencies(extractMetadataFromResult(result));
     if (isV7) {
       // Force push this dependency, there are cases where it isn't included out of our control.
@@ -550,6 +566,13 @@ async function compile(opts: any) {
       dependencies,
     };
   } catch (err) {
+    if (shouldLog)
+      console.log(
+        '%c🟧 babel-worker: CAUGHT AN ERROR:',
+        'font-weight: bold; color: orange;'
+      );
+    if (shouldLog) console.log({ ...err });
+
     const isModuleNotFoundError =
       err.code === 'MODULE_NOT_FOUND' ||
       err.message.indexOf('Cannot find module') > -1;

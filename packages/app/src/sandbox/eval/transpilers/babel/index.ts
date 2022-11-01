@@ -63,6 +63,7 @@ class BabelTranspiler extends WorkerTranspiler {
   constructor() {
     super(
       'babel-loader',
+      // This is the WorkerFactoryType function:
       // @ts-ignore
       async () => {
         let iteration = 0;

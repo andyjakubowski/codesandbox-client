@@ -32,6 +32,8 @@ export type ChildModule = Module & {
   parent: Module;
 };
 
+let isPreviewDependency = false;
+
 class ModuleSource {
   fileName: string;
   compiledCode: string;
@@ -347,13 +349,21 @@ export class TranspiledModule {
       if (options.isEntry) {
         tModule.setIsEntry(true);
       }
-    } catch (e) {
+    } catch (e: any) {
       if (e.type === 'module-not-found' && e.isDependency) {
+        // console.info(`e.type === 'module-not-found' && e.isDependency`);
         const { queryPath } = splitQueryFromPath(depPath);
         this.asyncDependencies.push(
           manager.downloadDependency(e.path, this, queryPath)
         );
       } else {
+        console.info(
+          `🟪 ${String(Date.now()).slice(
+            7
+          )} ModuleNotFoundError, for a non-node_modules dependency: ${e}`
+        );
+        // console.info(`This expression evaluates to false: e.type === 'module-not-found' && e.isDependency`)
+        // console.info({ ...e })
         // When a custom file resolver is given to the manager we will try
         // to resolve using this file resolver. If that fails we will still
         // mark the dependency as having missing deps.
@@ -362,6 +372,11 @@ export class TranspiledModule {
             // eslint-disable-next-line
             new Promise(async resolve => {
               try {
+                console.info(
+                  `🟪 ${String(Date.now()).slice(
+                    7
+                  )} Calling Manager.prototype.resolveTranspiledModule again`
+                );
                 const tModule = await manager.resolveTranspiledModule(
                   depPath,
                   options && options.isAbsolute ? '/' : this.module.path,
@@ -381,6 +396,7 @@ export class TranspiledModule {
                 }
                 resolve(tModule);
               } catch (err) {
+                console.info('🟪 Catching error: ', err);
                 if (process.env.NODE_ENV === 'development') {
                   console.error(
                     'Problem while trying to fetch file from custom fileResolver'
@@ -582,6 +598,10 @@ export class TranspiledModule {
     const { requires } = this.module;
     if (requires != null && this.query === '') {
       // We now know that this has been transpiled on the server, so we shortcut
+      console.log(
+        '%c🟦 transpiled-module: SOMETHING WAS TRANSPILED "ON THE SERVER"',
+        'font-weight: bold;'
+      );
       const loaderContext = this.getLoaderContext(manager, {});
       // These are precomputed requires, for npm dependencies
       await Promise.all(
@@ -674,7 +694,13 @@ export class TranspiledModule {
         this.resetCompilation();
       }
     }
-
+    // 🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥
+    if (this.module.path === '/index.js') {
+      console.info(
+        '🚨🚨🚨 Mapping through asyncDependencies',
+        String(Date.now()).slice(7)
+      );
+    }
     await Promise.all(
       this.asyncDependencies.map(async p => {
         try {
@@ -689,6 +715,13 @@ export class TranspiledModule {
     );
 
     this.asyncDependencies = [];
+
+    if (this.module.path === '/index.js') {
+      console.info(
+        '🚨🚨🚨 Transpiling initiators and dependencies',
+        String(Date.now()).slice(7)
+      );
+    }
 
     await Promise.all([
       ...Array.from(this.transpilationInitiators).map(t =>
@@ -791,9 +824,20 @@ export class TranspiledModule {
       asUMD = false,
       force = false,
       globals,
-    }: { asUMD?: boolean; force?: boolean; globals?: any } = {},
+      isOfInterest = false,
+    }: {
+      asUMD?: boolean;
+      force?: boolean;
+      globals?: any;
+      isOfInterest?: boolean;
+    } = {},
     initiator?: TranspiledModule
   ) {
+    if (isOfInterest) {
+      // console.log('%c🟦 transpiled-module: STARTING transpiledModule.evaluate', 'font-weight: bold;');
+      // console.log('%c🟦 transpiled-module: transpiledModule object:', 'font-weight: bold;');
+      // console.log(this);
+    }
     // empty module
     if (this.module.path === '/node_modules/empty/index.js') {
       return {};
@@ -804,7 +848,22 @@ export class TranspiledModule {
       return {};
     }
 
+    if (isOfInterest) {
+      // console.log('%c🟦 transpiled-module: this.source', 'font-weight: bold;');
+      // console.log(this.source);
+    }
+
     if (this.source == null) {
+      console.log(
+        '%c🟦 transpiled-module: this.source is null',
+        'font-weight: bold;'
+      );
+      console.log(
+        '%c🟦 transpiled-module: here’s the transpiledModule aka the “this”:',
+        'font-weight: bold;'
+      );
+      console.log(this);
+
       if (
         this.module.path.startsWith('/node_modules') &&
         !this.module.path.endsWith('.vue')
@@ -830,9 +889,17 @@ export class TranspiledModule {
         // this state is to just hard reload everything.
         manager.clearCache();
 
+        console.log(
+          '%c🟦 transpiled-module: ERROR: THIS MODULE HASN’T BEEN TRANSPILED YET ERROR',
+          'font-weight: bold;'
+        );
         throw new Error(`${this.getId()} hasn't been transpiled yet.`);
       }
     }
+
+    // if (isOfInterest) {
+    //   console.log('%c🟦 transpiled-module: AFTER this.source == null check', 'font-weight: bold;');
+    // }
 
     const localModule = this.module;
 
@@ -968,9 +1035,33 @@ export class TranspiledModule {
 
     const transpiledModule = this;
 
+    // if (isOfInterest) {
+    //   console.log('%c🟦 AFTER const transpiledModule = this;', 'font-weight: bold;');
+    // }
+
     try {
       // eslint-disable-next-line no-inner-declarations
       function require(path: string): any {
+        // const paths = ['react-dom', 'html-react-parser', "./components/Preview/Preview", "./styles.css", "react/jsx-runtime"];
+        // const paths = ["./components/Preview/Preview"];
+        const isPreviewPath = path === './components/Preview/Preview';
+        const isProjectModule = path.startsWith('./');
+
+        if (isPreviewPath) {
+          isPreviewDependency = true;
+        }
+
+        // if (path.startsWith('./')) {
+        //   console.log('%c🟦 IMPORTANT 🟦', 'font-weight: bold;')
+        if (isPreviewDependency) {
+          // console.log('%c🟦 transpiled-module require: CALLED WITH PATH:', 'font-weight: bold;');
+          // console.log('🟦 require:', path);
+          // console.log('%c🟦 transpiled-module require: INITIATOR:', 'font-weight: bold;');
+          // console.log(transpiledModule.getId());
+        }
+
+        // }
+
         if (path === '') {
           throw new Error('Cannot import an empty path');
         }
@@ -1029,13 +1120,31 @@ export class TranspiledModule {
         // of that compilation
         const cache = requiredTranspiledModule.compilation;
 
-        return requiredTranspiledModule.isCompilationCached(globals)
-          ? cache!.exports
-          : manager.evaluateTranspiledModule(
-              requiredTranspiledModule,
-              transpiledModule,
-              { force, globals }
-            );
+        const isCached = requiredTranspiledModule.isCompilationCached(globals);
+
+        // if (isProjectModule) {
+        //   console.log(`isCached: ${isCached}`);
+        // }
+
+        if (isCached) {
+          return cache!.exports;
+        }
+
+        if (isProjectModule) {
+          // console.log(`CALLING manager.evaluateTranspiledModule`);
+          // console.log('requiredTranspiledModule:');
+          // console.log(requiredTranspiledModule);
+          // console.log('transpiledModule:');
+          // console.log(transpiledModule);
+        }
+
+        const result = manager.evaluateTranspiledModule(
+          requiredTranspiledModule,
+          transpiledModule,
+          { force, globals, isOfInterest: isPreviewDependency }
+        );
+
+        return result;
       }
 
       // @ts-ignore
@@ -1058,18 +1167,24 @@ export class TranspiledModule {
 
       const code =
         this.source.compiledCode +
-        `\n//# sourceURL=${location.origin}${this.module.path}${
+        `//# sourceURL=${location.origin}${this.module.path}${
           this.query ? `?${this.hash}` : ''
         }`;
 
+      if (isOfInterest) {
+        // console.log('%c🟦 transpiled-module CALLING EVAL IN transpiledModule.evaluate', 'font-weight: bold;');
+      }
       const exports = evaluate(
         code,
         require,
         this.compilation,
         manager.envVariables,
         usedGlobals,
-        { asUMD }
+        { asUMD, isOfInterest }
       );
+      if (isOfInterest) {
+        // console.log('%c🟦 RETURNED FROM const exports = evaluate()', 'font-weight: bold;');
+      }
 
       /* eslint-disable no-param-reassign */
       manager.setHmrStatus('apply');
@@ -1083,10 +1198,15 @@ export class TranspiledModule {
 
       return exports;
     } catch (e) {
+      if (isOfInterest) {
+        // console.log('%c🟦 transpiled-module: transpiledModule.evaluate catches error', 'font-weight: bold;');
+      }
       e.tModule = e.tModule || transpiledModule;
 
       this.resetCompilation();
-
+      if (isOfInterest) {
+        // console.log('%c🟦 transpiled-module: transpiledModule.evaluate throws it again', 'font-weight: bold;');
+      }
       throw e;
     }
   }

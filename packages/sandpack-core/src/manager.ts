@@ -429,6 +429,10 @@ export default class Manager implements IEvaluator {
     module: Module,
     { force = false, globals }: { force?: boolean; globals?: object } = {}
   ): any {
+    // console.log('%c🟩 manager: evaluateModule STARTS', 'font-weight: bold;');
+    // console.log('%c🟩 manager: module argument:', 'font-weight: bold;');
+    // console.log(module);
+
     // Do a hard reload
     if (this.hardReload && !this.isFirstLoad) {
       this.reload();
@@ -440,6 +444,7 @@ export default class Manager implements IEvaluator {
       return {};
     }
 
+    // This might call manager.evaluateTranspiledModule
     // Evaluate the *changed* HMR modules first
     this.getTranspiledModules()
       .filter(t => t.hmrConfig && t.hmrConfig.isDirty())
@@ -452,11 +457,13 @@ export default class Manager implements IEvaluator {
     }
 
     try {
+      // console.log('%c🟩 manager: CALLING this.evaluateTranspiledModule, WHICH CALLS transpiledModule.evaluate', 'font-weight: bold;');
       const exports = this.evaluateTranspiledModule(
         transpiledModule,
         undefined,
-        { force, globals }
+        { force, globals, isOfInterest: true }
       );
+      // console.log('%c🟩 manager: RETURNED FROM transpiledModule.evaluate', 'font-weight: bold;');
 
       if (this.webpackHMR) {
         // Check if any module has been invalidated, because in that case we need to
@@ -482,6 +489,7 @@ export default class Manager implements IEvaluator {
 
       return exports;
     } finally {
+      // console.log('%c🟩 manager: evaluateModule FINALLY CLAUSE RUNS', 'font-weight: bold;');
       // Run post evaluate
       this.getTranspiledModules().forEach(t => t.postEvaluate(this));
     }
@@ -490,13 +498,21 @@ export default class Manager implements IEvaluator {
   evaluateTranspiledModule(
     transpiledModule: TranspiledModule,
     initiator?: TranspiledModule,
-    { force = false, globals }: { force?: boolean; globals?: object } = {}
+    {
+      force = false,
+      globals,
+      isOfInterest = false,
+    }: { force?: boolean; globals?: object; isOfInterest?: boolean } = {}
   ) {
     if (force && transpiledModule.compilation) {
       transpiledModule.compilation = null;
     }
 
-    return transpiledModule.evaluate(this, { force, globals }, initiator);
+    return transpiledModule.evaluate(
+      this,
+      { force, globals, isOfInterest },
+      initiator
+    );
   }
 
   addModule(module: Module) {
@@ -619,7 +635,15 @@ export default class Manager implements IEvaluator {
     transpiledModule.setIsEntry(true);
     transpiledModule.setIsTestFile(isTestFile);
 
+    console.log(
+      '%c🟩 manager: CALL TRANSPILE ON ENTRY FILE',
+      'font-weight: bold;'
+    );
+    // 🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥
     const result = await transpiledModule.transpile(this);
+    // 🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥
+    console.log('%c🟩 manager: RETURNED FROM TRANSPILE', 'font-weight: bold;');
+
     this.getTranspiledModules().forEach(t => t.postTranspile(this));
 
     return result;
@@ -878,6 +902,7 @@ export default class Manager implements IEvaluator {
         connectedPath = connectedPath.replace('/node_modules/', '');
 
         if (!isDependency) {
+          // console.info('Manager.prototype.resolveModuleAsync: Throwing ModuleNotFoundError where isDependency is false')
           throw new ModuleNotFoundError(shimmedPath, false, parentPath);
         }
 
@@ -1013,6 +1038,7 @@ export default class Manager implements IEvaluator {
         connectedPath = connectedPath.replace('/node_modules/', '');
 
         if (!isDependency) {
+          // console.info('Manager.prototype.resolveModule: Throwing ModuleNotFoundError where isDependency is false')
           throw new ModuleNotFoundError(shimmedPath, false, parentPath);
         }
 

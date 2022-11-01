@@ -671,12 +671,22 @@ async function compile(opts: CompileOptions) {
     dispatch({ type: 'status', status: 'transpiling' });
     manager.setStage('transpilation');
 
+    // console.log('%c🟥 compile: START TRANSPILING', 'font-weight: bold;');
+
+    // console.log('%c🟥 compile: VERIFY TREE TRANSPILED', 'font-weight: bold;');
     await manager.verifyTreeTranspiled();
+
+    // 🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥
+    console.log('%c🟥 compile: TRANSPILE MODULES', 'font-weight: bold;');
     await manager.transpileModules(managerModuleToTranspile);
+    // 🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥
 
     metrics.endMeasure('transpilation', { displayName: 'Transpilation' });
 
+    // console.log('%c🟥 compile: START EVALUATING', 'font-weight: bold;');
+
     dispatch({ type: 'status', status: 'evaluating' });
+
     manager.setStage('evaluation');
 
     if (!skipEval) {
@@ -762,9 +772,52 @@ async function compile(opts: CompileOptions) {
 
       const oldHTML = document.body.innerHTML;
       metrics.measure('evaluation');
+
+      console.log(
+        '%c🟥 compile: manager.getTranspiledModules():',
+        'font-weight: bold;'
+      );
+      console.log(
+        manager
+          .getTranspiledModules()
+          .sort((a, b) => {
+            if (a.module.path > b.module.path) {
+              return 1;
+            }
+            if (a.module.path < b.module.path) {
+              return -1;
+            }
+            return 0;
+          })
+          .map(mod => [mod.module.path, mod])
+      );
+
+      // console.log('%c🟥 compile: CALLING manager.evaluateModule', 'font-weight: bold;');
+
+      // This is the call inside of which the transpilation error is later thrown
       const evalled = manager.evaluateModule(managerModuleToTranspile, {
         force: isModuleView,
       });
+
+      // console.log('%c🟥 compile: RETURNED FROM manager.evaluateModule:', 'font-weight: bold;');
+      console.log(
+        '%c🟥 compile: manager.getTranspiledModules():',
+        'font-weight: bold;'
+      );
+      console.log(
+        manager
+          .getTranspiledModules()
+          .sort((a, b) => {
+            if (a.module.path > b.module.path) {
+              return 1;
+            }
+            if (a.module.path < b.module.path) {
+              return -1;
+            }
+            return 0;
+          })
+          .map(mod => [mod.module.path, mod])
+      );
 
       metrics.endMeasure('evaluation', { displayName: 'Evaluation' });
 
@@ -836,9 +889,19 @@ async function compile(opts: CompileOptions) {
       }
     }, 600);
   } catch (e) {
+    // console.log('%c🟥 compile: catches error', 'font-weight: bold;');
     // eslint-disable-next-line no-console
-    console.log('Error in sandbox:');
+    console.log('🟥 compile: Error in sandbox:');
+    console.log({ ...e, message: e.message });
     console.error(e);
+
+    console.log(
+      '%c🟥 compile: manager.getTranspiledModules()',
+      'font-weight: bold;'
+    );
+    console.log(
+      manager.getTranspiledModules().map(mod => [mod.module.path, mod])
+    );
 
     if (manager) {
       manager.clearCache();
@@ -852,10 +915,13 @@ async function compile(opts: CompileOptions) {
     // @ts-ignore
     event.error = e;
 
+    // console.log('%c🟥 compile: DISPATCHING ERROR EVENT', 'font-weight: bold;');
     window.dispatchEvent(event);
 
     hadError = true;
   } finally {
+    // console.log('%c🟥 compile: FINALLY CLAUSE IN COMPILE RUNS', 'font-weight: bold;');
+
     setTimeout(() => {
       try {
         // Set a timeout so there's a chance that we also catch runtime errors
